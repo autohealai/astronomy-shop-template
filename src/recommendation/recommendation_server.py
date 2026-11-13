@@ -39,6 +39,9 @@ from metrics import (
 cached_ids = []
 first_run = True
 
+# A product catalog call must not wait forever.
+CATALOG_TIMEOUT = int(os.environ.get("RECOMMENDATION_CATALOG_TIMEOUT_MS", "2000"))
+
 class RecommendationService(demo_pb2_grpc.RecommendationServiceServicer):
     def ListRecommendations(self, request, context):
         prod_list = get_product_list(request.product_ids)
@@ -81,7 +84,7 @@ def get_product_list(request_product_ids):
                 first_run = False
                 span.set_attribute("app.cache_hit", False)
                 logger.info("get_product_list: cache miss")
-                cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
+                cat_response = list_catalog_products()
                 response_ids = [x.id for x in cat_response.products]
                 cached_ids = cached_ids + response_ids
                 cached_ids = cached_ids + cached_ids[:len(cached_ids) // 4]
@@ -92,7 +95,7 @@ def get_product_list(request_product_ids):
                 product_ids = cached_ids
         else:
             span.set_attribute("app.recommendation.cache_enabled", False)
-            cat_response = product_catalog_stub.ListProducts(demo_pb2.Empty())
+            cat_response = list_catalog_products()
             product_ids = [x.id for x in cat_response.products]
 
         span.set_attribute("app.products.count", len(product_ids))
@@ -111,6 +114,14 @@ def get_product_list(request_product_ids):
         span.set_attribute("app.filtered_products.list", prod_list)
 
         return prod_list
+
+
+def list_catalog_products():
+    try:
+        return product_catalog_stub.ListProducts(demo_pb2.Empty(), timeout=CATALOG_TIMEOUT)
+    except Exception:
+        logger.info("get_product_list: product catalog did not answer")
+        return demo_pb2.ListProductsResponse()
 
 
 def must_map_env(key: str):
