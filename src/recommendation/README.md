@@ -18,3 +18,9 @@ From the root directory, run:
 ```sh
 docker compose build recommendation
 ```
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `CATALOG_TIMEOUT_MS` | `2000` | How long a call to the product catalog can take, in milliseconds. |
